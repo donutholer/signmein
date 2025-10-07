@@ -17,12 +17,29 @@ export default function ScanPage() {
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string>("");
   const [active, setActive] = useState(false);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState<string | undefined>(undefined);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const inflightRef = useRef<boolean>(false);
   const lastResultRef = useRef<string>("");
+
+  async function listCams() {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    setDevices(all.filter((d) => d.kind === "videoinput"));
+  }
+
+  useEffect(() => {
+    async function fetchDevices() {
+      if (navigator.mediaDevices.enumerateDevices) {
+        await navigator.mediaDevices.enumerateDevices();
+        await listCams();
+      }
+    }
+    fetchDevices();
+  }, []);
 
   const startSession = () =>
     start(async () => {
@@ -44,10 +61,21 @@ export default function ScanPage() {
 
   async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+      const constraints: MediaStreamConstraints = {
+        video: deviceId
+          ? {
+              deviceId: { exact: deviceId },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            }
+          : {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
         audio: false,
-      });
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
@@ -76,14 +104,18 @@ export default function ScanPage() {
     const c = canvasRef.current;
     if (!v || !c) return;
 
-    const w = 640;
-    const h = Math.floor((v.videoHeight / v.videoWidth) * w) || 480;
-    c.width = w;
-    c.height = h;
+    const vw = v.videoWidth,
+      vh = v.videoHeight;
+    const side = Math.min(vw, vh);
+    const sx = Math.floor((vw - side) / 2);
+    const sy = Math.floor((vh - side) / 2);
 
     const ctx = c.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(v, 0, 0, w, h);
+    const OUT = 1080;
+    c.width = OUT;
+    c.height = OUT;
+    ctx.drawImage(v, sx, sy, side, side, 0, 0, OUT, OUT);
 
     inflightRef.current = true;
     const blob: Blob = await new Promise((res) =>
@@ -167,6 +199,32 @@ export default function ScanPage() {
       <p className="text-sm text-slate-600">Session: {sessionId ?? "—"}</p>
       <p className="text-sm">{message}</p>
 
+      {devices.length > 1 && (
+        <div className="flex items-center gap-2 text-sm">
+          <span>Camera:</span>
+          <select
+            value={deviceId ?? ""}
+            onChange={(e) => setDeviceId(e.target.value || undefined)}
+            className="border rounded px-2 py-1"
+          >
+            <option value="">Auto</option>
+            {devices.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || `Camera ${d.deviceId.slice(0, 6)}…`}
+              </option>
+            ))}
+          </select>
+          <button
+            className="border rounded px-2 py-1"
+            onClick={async () => {
+              stopCamera();
+              await startCamera();
+            }}
+          >
+            Switch
+          </button>
+        </div>
+      )}
       <div className="w-full max-w-md rounded-xl overflow-hidden border grid">
         <video
           ref={videoRef}
