@@ -43,7 +43,7 @@ export default function Signin() {
               height={18}
             />
             <span className="text-slate-800 dark:text-slate-100">
-              {isPending ? "Redirecting…" : "Continue with Google"}
+              {isPending ? "Redirecting..." : "Continue with Google"}
             </span>
           </button>
 

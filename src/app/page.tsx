@@ -1,62 +1,60 @@
-import OneTapComponent from "@/components/GoogleOneTap";
-import LogOut from "@/components/Logout";
-import StudentQR from "@/components/StudentQR";
-import { createClient } from "@utils/supabase/server";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
-export default async function Home() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-
-  if (data.user && !data.user.user_metadata?.role) {
-    redirect("/onboarding/role");
-  }
-
-  const role = data.user?.user_metadata?.role as
-    | "staff"
-    | "student"
-    | undefined;
+export default function Home() {
+  const currentYear = new Date().getFullYear();
 
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-6 row-start-2 items-center sm:items-start">
-        {data.user ? (
-          <>
-            <h1 className="text-2xl font-semibold text-gray-700">
-              Welcome, {data.user.email?.split("@")[0] ?? "user"}!
-            </h1>
-
-            {role === "staff" ? (
-              <Link
-                href="/scan"
-                className="cursor-pointer inline-flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium shadow-sm hover:shadow"
+    <div className="min-h-dvh grid place-items-center bg-white dark:bg-neutral-950">
+      <div className="max-w-2xl mx-auto px-4 py-16">
+        <main className="text-center space-y-8">
+          {/* Logo placeholder */}
+          <div className="flex justify-center">
+            <div className="w-16 h-16 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 grid place-items-center">
+              <svg
+                className="w-8 h-8 text-neutral-600 dark:text-neutral-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                Open Scanner
-              </Link>
-            ) : role === "student" ? (
-              <div className="flex flex-col gap-3">
-                <p className="text-slate-600">
-                  Show this QR to staff to check in:
-                </p>
-                <StudentQR />
-              </div>
-            ) : null}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+          </div>
 
-            <LogOut />
-          </>
-        ) : (
-          <>
-            <OneTapComponent />
+          {/* Product name and tagline */}
+          <div className="space-y-3">
+            <h1 className="text-3xl font-medium text-neutral-950 dark:text-neutral-50">
+              Attendance System
+            </h1>
+            <p className="text-lg text-neutral-600 dark:text-neutral-400 text-balance">
+              Simple, secure attendance tracking for modern classrooms
+            </p>
+          </div>
+
+          {/* CTA */}
+          <div className="pt-4">
             <Link
               href="/signin"
-              className="inline-flex text-gray-800 items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium shadow-sm hover:shadow transition"
+              className="inline-flex items-center px-5 py-2.5 rounded-lg font-medium border border-neutral-200 dark:border-neutral-800 bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 hover:bg-neutral-800 dark:hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 dark:focus-visible:ring-white focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-950 transition-colors"
             >
-              Sign in with Google
+              Sign in
             </Link>
-          </>
-        )}
-      </main>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="mt-16 text-center">
+          <p className="text-sm text-neutral-500 dark:text-neutral-500">
+            © {currentYear} Attendance System
+          </p>
+        </footer>
+      </div>
     </div>
   );
 }
