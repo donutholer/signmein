@@ -58,6 +58,12 @@ export default function StudentPage() {
       <div className="max-w-md w-full space-y-6">
         <div className="flex justify-end gap-2 mb-4">
           <Link
+            href="/sessions"
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+          >
+            My Sessions
+          </Link>
+          <Link
             href="/scan"
             className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
           >

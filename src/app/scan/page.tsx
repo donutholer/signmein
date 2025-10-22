@@ -217,6 +217,12 @@ export default function ScanPage() {
           </div>
           <div className="flex gap-2">
             <Link
+              href="/sessions"
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+            >
+              My Sessions
+            </Link>
+            <Link
               href="/student"
               className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
             >
