@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.74.0",
     "@types/qrcode": "^1.5.5",
     "google-one-tap": "^1.0.6",
+    "jsqr": "^1.4.0",
     "next": "16.0.0",
     "qrcode": "^1.5.4",
     "react": "19.2.0",

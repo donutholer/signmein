@@ -2,15 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createSession, endSession, scanAndCheckIn } from "./actions";
-
-type DecodeResponse = Array<{
-  type: string;
-  symbol: Array<{
-    seq: number;
-    data: string | null;
-    error: string | null;
-  }>;
-}>;
+import jsQR from "jsqr";
 
 export default function ScanPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -19,12 +11,14 @@ export default function ScanPage() {
   const [active, setActive] = useState(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState<string | undefined>(undefined);
+  const [checkInCount, setCheckInCount] = useState<number>(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const inflightRef = useRef<boolean>(false);
   const lastResultRef = useRef<string>("");
+  const lastResultTimeRef = useRef<number>(0);
 
   async function listCams() {
     const all = await navigator.mediaDevices.enumerateDevices();
@@ -45,6 +39,7 @@ export default function ScanPage() {
     start(async () => {
       const id = await createSession();
       setSessionId(id);
+      setCheckInCount(0);
       setMessage("Session created. Initializing camera…");
       await startCamera();
       setActive(true);
@@ -54,9 +49,10 @@ export default function ScanPage() {
     start(async () => {
       if (!sessionId) return;
       await endSession(sessionId);
-      setMessage("Session ended.");
+      setMessage(`Session ended. Total check-ins: ${checkInCount}`);
       setActive(false);
       stopCamera();
+      setSessionId(null);
     });
 
   async function startCamera() {
@@ -104,58 +100,63 @@ export default function ScanPage() {
     const c = canvasRef.current;
     if (!v || !c) return;
 
-    const vw = v.videoWidth,
-      vh = v.videoHeight;
-    const side = Math.min(vw, vh);
-    const sx = Math.floor((vw - side) / 2);
-    const sy = Math.floor((vh - side) / 2);
+    const vw = v.videoWidth;
+    const vh = v.videoHeight;
+
+    if (vw === 0 || vh === 0) return;
 
     const ctx = c.getContext("2d");
     if (!ctx) return;
-    const OUT = 1080;
-    c.width = OUT;
-    c.height = OUT;
-    ctx.drawImage(v, sx, sy, side, side, 0, 0, OUT, OUT);
 
-    inflightRef.current = true;
-    const blob: Blob = await new Promise((res) =>
-      c.toBlob((b) => res(b!), "image/png")
-    );
-    const form = new FormData();
-    form.append("file", blob, "frame.png");
+    c.width = vw;
+    c.height = vh;
+    ctx.drawImage(v, 0, 0, vw, vh);
 
-    try {
-      const r = await fetch("https://api.qrserver.com/v1/read-qr-code/", {
-        method: "POST",
-        body: form,
-      });
-      const json = (await r.json()) as DecodeResponse;
-      const data = json?.[0]?.symbol?.[0]?.data ?? null;
-      const err = json?.[0]?.symbol?.[0]?.error ?? null;
+    const imageData = ctx.getImageData(0, 0, vw, vh);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
 
-      if (err) {
-      } else if (data && data !== lastResultRef.current) {
+    if (code && code.data) {
+      const now = Date.now();
+      const data = code.data;
+
+      // Prevent duplicate scans within 3 seconds
+      if (data === lastResultRef.current && now - lastResultTimeRef.current < 3000) {
+        return;
+      }
+
+      if (data !== lastResultRef.current) {
         lastResultRef.current = data;
+        lastResultTimeRef.current = now;
+        inflightRef.current = true;
+
         try {
           const res = await scanAndCheckIn(data, sessionId);
-          if (res.duplicate) setMessage("Already checked in for this session.");
-          else setMessage("Checked in!");
+          if (res.duplicate) {
+            setMessage("⚠️ Already checked in for this session.");
+          } else {
+            setCheckInCount((prev) => prev + 1);
+            setMessage("✅ Checked in successfully!");
+            // Clear message after 2 seconds
+            setTimeout(() => {
+              setMessage("Ready to scan...");
+            }, 2000);
+          }
         } catch (e: unknown) {
           if (e instanceof Error) {
-            setMessage(e.message);
+            setMessage(`❌ Error: ${e.message}`);
           } else {
-            setMessage("Scan failed");
+            setMessage("❌ Scan failed");
           }
+          // Clear error message after 3 seconds
+          setTimeout(() => {
+            setMessage("Ready to scan...");
+          }, 3000);
+        } finally {
+          inflightRef.current = false;
         }
       }
-    } catch (e: unknown) {
-      if (e instanceof Error) {
-        setMessage(e.message);
-      } else {
-        setMessage("Decode error");
-      }
-    } finally {
-      inflightRef.current = false;
     }
   }
 
@@ -163,7 +164,8 @@ export default function ScanPage() {
     let last = 0;
     const tick = (t: number) => {
       rafRef.current = requestAnimationFrame(tick);
-      if (t - last > 1000) {
+      // Scan every 250ms for more responsive detection
+      if (t - last > 250) {
         last = t;
         void tryDecodeFrame();
       }
@@ -176,105 +178,112 @@ export default function ScanPage() {
   }, []);
 
   return (
-    <main className="min-h-screen p-6 flex flex-col items-center gap-4">
-      <h1 className="text-2xl font-semibold">Staff Scanning (GOQR)</h1>
+    <main className="min-h-screen p-6 flex flex-col items-center gap-6 bg-white dark:bg-neutral-950">
+      <div className="max-w-2xl w-full space-y-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-semibold text-neutral-950 dark:text-neutral-50">
+            Staff Scanning
+          </h1>
+          <p className="text-neutral-600 dark:text-neutral-400 mt-2">
+            Scan student QR codes to check them in
+          </p>
+        </div>
 
-      <div className="flex gap-3">
-        <button
-          onClick={startSession}
-          disabled={pending || !!sessionId}
-          className="cursor-pointer rounded-xl border px-4 py-2"
-        >
-          {pending && !sessionId ? "Creating..." : "Create Session"}
-        </button>
-        <button
-          onClick={finishSession}
-          disabled={pending || !sessionId}
-          className="cursor-pointer rounded-xl border px-4 py-2"
-        >
-          {pending && sessionId ? "Ending..." : "End Session"}
-        </button>
-      </div>
-
-      <p className="text-sm text-slate-600">Session: {sessionId ?? "—"}</p>
-      <p className="text-sm">{message}</p>
-
-      {devices.length > 1 && (
-        <div className="flex items-center gap-2 text-sm">
-          <span>Camera:</span>
-          <select
-            value={deviceId ?? ""}
-            onChange={(e) => setDeviceId(e.target.value || undefined)}
-            className="border rounded px-2 py-1"
-          >
-            <option value="">Auto</option>
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Camera ${d.deviceId.slice(0, 6)}…`}
-              </option>
-            ))}
-          </select>
+        <div className="flex gap-3 justify-center">
           <button
-            className="border rounded px-2 py-1"
-            onClick={async () => {
-              stopCamera();
-              await startCamera();
-            }}
+            onClick={startSession}
+            disabled={pending || !!sessionId}
+            className="px-6 py-3 rounded-lg font-medium border border-neutral-200 dark:border-neutral-800 bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 hover:bg-neutral-800 dark:hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Switch
+            {pending && !sessionId ? "Creating..." : "Create Session"}
+          </button>
+          <button
+            onClick={finishSession}
+            disabled={pending || !sessionId}
+            className="px-6 py-3 rounded-lg font-medium border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 text-neutral-950 dark:text-white hover:bg-neutral-50 dark:hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {pending && sessionId ? "Ending..." : "End Session"}
           </button>
         </div>
-      )}
-      <div className="w-full max-w-md rounded-xl overflow-hidden border grid">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className="w-full h-full bg-black aspect-[3/4] object-cover"
-        />
-        <canvas ref={canvasRef} className="hidden" />
-      </div>
 
-      {active && (
-        <label className="text-xs text-slate-500">
-          Trouble scanning? Upload a photo:{" "}
-          <input
-            type="file"
-            accept="image/*"
-            onChange={async (e) => {
-              if (!sessionId || !e.target.files?.[0]) return;
-              const form = new FormData();
-              form.append("file", e.target.files[0]);
-              try {
-                const r = await fetch(
-                  "https://api.qrserver.com/v1/read-qr-code/",
-                  {
-                    method: "POST",
-                    body: form,
-                  }
-                );
-                const json = (await r.json()) as DecodeResponse;
-                const data = json?.[0]?.symbol?.[0]?.data ?? null;
-                if (data) {
-                  lastResultRef.current = data;
-                  const res = await scanAndCheckIn(data, sessionId);
-                  if (res.duplicate)
-                    setMessage("Already checked in for this session.");
-                  else setMessage("Checked in!");
-                } else {
-                  setMessage("No code found in image.");
-                }
-              } catch (err: unknown) {
-                if (err instanceof Error) {
-                  setMessage(err.message);
-                } else {
-                  setMessage("Decode error");
-                }
-              }
-            }}
-          />
-        </label>
-      )}
+        <div className="bg-neutral-50 dark:bg-neutral-900 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-800 space-y-3">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                Session ID
+              </p>
+              <p className="font-mono text-sm text-neutral-950 dark:text-neutral-50">
+                {sessionId ?? "—"}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                Check-ins
+              </p>
+              <p className="text-2xl font-semibold text-neutral-950 dark:text-neutral-50">
+                {checkInCount}
+              </p>
+            </div>
+          </div>
+          {message && (
+            <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800">
+              <p className="text-sm text-center text-neutral-700 dark:text-neutral-300">
+                {message}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {devices.length > 1 && active && (
+          <div className="flex items-center justify-center gap-3 text-sm">
+            <span className="text-neutral-600 dark:text-neutral-400">Camera:</span>
+            <select
+              value={deviceId ?? ""}
+              onChange={(e) => setDeviceId(e.target.value || undefined)}
+              className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 text-neutral-950 dark:text-neutral-50 rounded-lg px-3 py-1.5"
+            >
+              <option value="">Auto</option>
+              {devices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Camera ${d.deviceId.slice(0, 6)}…`}
+                </option>
+              ))}
+            </select>
+            <button
+              className="border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+              onClick={async () => {
+                stopCamera();
+                await startCamera();
+              }}
+            >
+              Switch
+            </button>
+          </div>
+        )}
+
+        {active && (
+          <div className="relative w-full rounded-2xl overflow-hidden border-4 border-neutral-200 dark:border-neutral-800 shadow-lg">
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className="w-full h-full bg-black aspect-[3/4] object-cover"
+            />
+            <canvas ref={canvasRef} className="hidden" />
+            <div className="absolute top-4 left-4 right-4">
+              <div className="bg-black/50 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-xs text-center">
+                Position QR code within the frame
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!active && sessionId && (
+          <div className="text-center text-neutral-600 dark:text-neutral-400 py-12">
+            <p>Camera is initializing...</p>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
