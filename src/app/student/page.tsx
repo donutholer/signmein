@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { issueStudentQR } from "./actions";
+import { issueStudentQR, getUserRole } from "./actions";
 import { signOut } from "@/app/actions";
 import Link from "next/link";
 import QRCode from "qrcode";
@@ -9,10 +9,18 @@ import QRCode from "qrcode";
 export default function StudentPage() {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     let intervalId: NodeJS.Timeout;
+
+    // Fetch user role once
+    void getUserRole().then((role) => {
+      if (mounted) {
+        setUserRole(role);
+      }
+    });
 
     async function generateQR() {
       try {
@@ -34,7 +42,9 @@ export default function StudentPage() {
         }
       } catch (err) {
         if (mounted) {
-          setError(err instanceof Error ? err.message : "Failed to generate QR");
+          setError(
+            err instanceof Error ? err.message : "Failed to generate QR"
+          );
         }
       }
     }
@@ -43,6 +53,7 @@ export default function StudentPage() {
     void generateQR();
 
     // Refresh every 10 seconds (QR expires after 45 seconds, so this keeps it fresh)
+    // eslint-disable-next-line prefer-const
     intervalId = setInterval(() => {
       void generateQR();
     }, 10000);
@@ -57,18 +68,22 @@ export default function StudentPage() {
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-950">
       <div className="max-w-md w-full space-y-6">
         <div className="flex justify-end gap-2 mb-4">
-          <Link
-            href="/sessions"
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
-          >
-            My Sessions
-          </Link>
-          <Link
-            href="/scan"
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
-          >
-            Back to Scanning
-          </Link>
+          {userRole === "staff" && (
+            <>
+              <Link
+                href="/sessions"
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+              >
+                My Sessions
+              </Link>
+              <Link
+                href="/scan"
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+              >
+                Back to Scanning
+              </Link>
+            </>
+          )}
           <form action={signOut}>
             <button
               type="submit"
