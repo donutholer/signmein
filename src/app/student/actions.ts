@@ -11,11 +11,6 @@ export async function issueStudentQR() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/signin");
 
-  // Ensure user is a student
-  if (user.user_metadata?.role !== "student") {
-    redirect("/scan");
-  }
-
   const w = currentWindow();
   const sig = signQR(user.id, w);
   return `${user.id}:${w}:${sig}`;
