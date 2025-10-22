@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { issueStudentQR } from "./actions";
+import { signOut } from "@/app/actions";
 import QRCode from "qrcode";
 
 export default function StudentPage() {
@@ -54,6 +55,17 @@ export default function StudentPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-950">
       <div className="max-w-md w-full space-y-6">
+        <div className="flex justify-end mb-4">
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+            >
+              Sign Out
+            </button>
+          </form>
+        </div>
+
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-semibold text-neutral-950 dark:text-neutral-50">
             Your QR Code

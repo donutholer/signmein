@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createSession, endSession, scanAndCheckIn } from "./actions";
+import { signOut } from "@/app/actions";
 import jsQR from "jsqr";
 
 export default function ScanPage() {
@@ -40,9 +41,11 @@ export default function ScanPage() {
       const id = await createSession();
       setSessionId(id);
       setCheckInCount(0);
+      setActive(true); // Set active BEFORE starting camera so video element is mounted
       setMessage("Session created. Initializing camera…");
+      // Wait for next tick to ensure video element is rendered
+      await new Promise((resolve) => setTimeout(resolve, 100));
       await startCamera();
-      setActive(true);
     });
 
   const finishSession = () =>
@@ -75,14 +78,26 @@ export default function ScanPage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        setMessage("Camera ready. Scanning for QR codes...");
+      } else {
+        throw new Error("Video element not available");
       }
       step();
     } catch (e: unknown) {
       if (e instanceof Error) {
-        setMessage(e.message);
+        if (e.name === "NotAllowedError") {
+          setMessage("❌ Camera permission denied. Please allow camera access.");
+        } else if (e.name === "NotFoundError") {
+          setMessage("❌ No camera found. Please connect a camera.");
+        } else if (e.name === "NotReadableError") {
+          setMessage("❌ Camera is already in use by another application.");
+        } else {
+          setMessage(`❌ Camera error: ${e.message}`);
+        }
       } else {
-        setMessage("Unable to access camera");
+        setMessage("❌ Unable to access camera");
       }
+      setActive(false);
     }
   }
 
@@ -122,7 +137,10 @@ export default function ScanPage() {
       const data = code.data;
 
       // Prevent duplicate scans within 3 seconds
-      if (data === lastResultRef.current && now - lastResultTimeRef.current < 3000) {
+      if (
+        data === lastResultRef.current &&
+        now - lastResultTimeRef.current < 3000
+      ) {
         return;
       }
 
@@ -180,13 +198,23 @@ export default function ScanPage() {
   return (
     <main className="min-h-screen p-6 flex flex-col items-center gap-6 bg-white dark:bg-neutral-950">
       <div className="max-w-2xl w-full space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold text-neutral-950 dark:text-neutral-50">
-            Staff Scanning
-          </h1>
-          <p className="text-neutral-600 dark:text-neutral-400 mt-2">
-            Scan student QR codes to check them in
-          </p>
+        <div className="flex justify-between items-start">
+          <div className="text-center flex-1">
+            <h1 className="text-3xl font-semibold text-neutral-950 dark:text-neutral-50">
+              Staff Scanning
+            </h1>
+            <p className="text-neutral-600 dark:text-neutral-400 mt-2">
+              Scan student QR codes to check them in
+            </p>
+          </div>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+            >
+              Sign Out
+            </button>
+          </form>
         </div>
 
         <div className="flex gap-3 justify-center">
@@ -236,7 +264,9 @@ export default function ScanPage() {
 
         {devices.length > 1 && active && (
           <div className="flex items-center justify-center gap-3 text-sm">
-            <span className="text-neutral-600 dark:text-neutral-400">Camera:</span>
+            <span className="text-neutral-600 dark:text-neutral-400">
+              Camera:
+            </span>
             <select
               value={deviceId ?? ""}
               onChange={(e) => setDeviceId(e.target.value || undefined)}
@@ -265,6 +295,7 @@ export default function ScanPage() {
           <div className="relative w-full rounded-2xl overflow-hidden border-4 border-neutral-200 dark:border-neutral-800 shadow-lg">
             <video
               ref={videoRef}
+              autoPlay
               playsInline
               muted
               className="w-full h-full bg-black aspect-[3/4] object-cover"
